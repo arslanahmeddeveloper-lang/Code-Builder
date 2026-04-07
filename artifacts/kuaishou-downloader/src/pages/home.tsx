@@ -50,6 +50,21 @@ export default function Home() {
     );
   };
   
+  const handleFileDownload = (videoUrl: string) => {
+    const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoUrl)}`;
+    const filename = videoUrl.includes("kwai") ? "kwai-video.mp4" : "kuaishou-video.mp4";
+    const a = document.createElement("a");
+    a.href = proxyUrl;
+    a.download = filename;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast.success("Download started!", {
+      description: "Your video is downloading.",
+    });
+  };
+
   const handleCopyLink = (videoUrl: string) => {
     navigator.clipboard.writeText(videoUrl);
     toast.success("Link copied!", {
@@ -157,7 +172,7 @@ export default function Home() {
                   <div className="md:col-span-2 relative rounded-lg overflow-hidden bg-black/50 aspect-[9/16] border border-white/5 shadow-inner">
                     {downloadMutation.data.video_url ? (
                       <video 
-                        src={downloadMutation.data.video_url} 
+                        src={`/api/proxy-video?url=${encodeURIComponent(downloadMutation.data.video_url)}`}
                         poster={downloadMutation.data.thumbnail || undefined}
                         controls 
                         className="w-full h-full object-contain"
@@ -191,18 +206,13 @@ export default function Home() {
                     
                     <div className="flex flex-col sm:flex-row gap-3 pt-4">
                       <Button 
-                        asChild 
                         size="lg" 
                         className="flex-1 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 font-medium h-14"
                         data-testid="button-download"
+                        onClick={() => handleFileDownload(downloadMutation.data.video_url)}
                       >
-                        <a 
-                          href={`/api/proxy-video?url=${encodeURIComponent(downloadMutation.data.video_url)}`}
-                          download="kuaishou-video.mp4"
-                        >
-                          <Download className="w-5 h-5 mr-2" />
-                          Download File
-                        </a>
+                        <Download className="w-5 h-5 mr-2" />
+                        Download File
                       </Button>
                       <Button 
                         type="button" 
