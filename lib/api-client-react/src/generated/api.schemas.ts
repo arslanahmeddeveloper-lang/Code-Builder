@@ -8,3 +8,42 @@
 export interface HealthStatus {
   status: string;
 }
+
+export interface DownloadRequest {
+  /** Kuaishou video URL */
+  url: string;
+}
+
+export type DownloadResponseStatus =
+  (typeof DownloadResponseStatus)[keyof typeof DownloadResponseStatus];
+
+export const DownloadResponseStatus = {
+  success: "success",
+} as const;
+
+export interface DownloadResponse {
+  status: DownloadResponseStatus;
+  title?: string | null;
+  thumbnail?: string | null;
+  video_url: string;
+  quality: string;
+  author?: string | null;
+  duration?: number | null;
+  cached?: boolean;
+}
+
+export type ErrorResponseStatus =
+  (typeof ErrorResponseStatus)[keyof typeof ErrorResponseStatus];
+
+export const ErrorResponseStatus = {
+  error: "error",
+} as const;
+
+export interface ErrorResponse {
+  status: ErrorResponseStatus;
+  message: string;
+}
+
+export type ProxyVideoParams = {
+  url: string;
+};

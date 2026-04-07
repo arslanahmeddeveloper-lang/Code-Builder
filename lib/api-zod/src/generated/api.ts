@@ -14,3 +14,30 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * Extract video URL and metadata from a Kuaishou URL
+ * @summary Download video
+ */
+export const DownloadVideoBody = zod.object({
+  url: zod.string().describe("Kuaishou video URL"),
+});
+
+export const DownloadVideoResponse = zod.object({
+  status: zod.enum(["success"]),
+  title: zod.string().nullish(),
+  thumbnail: zod.string().nullish(),
+  video_url: zod.string(),
+  quality: zod.string(),
+  author: zod.string().nullish(),
+  duration: zod.number().nullish(),
+  cached: zod.boolean().optional(),
+});
+
+/**
+ * Proxy a video URL through the server for download
+ * @summary Proxy video for download
+ */
+export const ProxyVideoQueryParams = zod.object({
+  url: zod.coerce.string(),
+});

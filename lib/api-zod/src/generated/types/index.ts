@@ -6,4 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./downloadRequest";
+export * from "./downloadResponse";
+export * from "./downloadResponseStatus";
+export * from "./errorResponse";
+export * from "./errorResponseStatus";
 export * from "./healthStatus";
+export * from "./proxyVideoParams";

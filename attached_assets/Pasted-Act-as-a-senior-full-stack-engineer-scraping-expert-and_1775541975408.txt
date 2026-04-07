@@ -1,0 +1,181 @@
+Act as a senior full-stack engineer, scraping expert, and system architect.
+
+Your task is to build a high-performance "Kuaishou Video Downloader Web App" WITHOUT using any official API. The system must rely entirely on web scraping and reverse engineering techniques.
+
+========================
+🎯 OBJECTIVE
+============
+
+Create a web app where:
+
+* User pastes a Kuaishou video URL
+* System extracts the direct video file
+* Shows instant preview
+* Allows fast download to user's device
+
+========================
+⚙️ TECH STACK
+=============
+
+Frontend:
+
+* React.js (preferred) or Next.js
+* Tailwind CSS for styling
+* Axios for API calls
+
+Backend:
+
+* Node.js (Express) OR Python (Flask/FastAPI)
+* Scraping: Cheerio (Node) OR BeautifulSoup/lxml (Python)
+
+========================
+🧠 CORE LOGIC (SCRAPING ENGINE)
+===============================
+
+1. Accept user URL input
+
+2. Validate URL (must be Kuaishou domain)
+
+3. Send HTTP request with real browser headers:
+
+   * User-Agent
+   * Accept-Language
+   * Referer
+
+4. Handle:
+
+   * Redirects
+   * Mobile vs Desktop versions
+
+5. Parse HTML and extract video using:
+
+   * meta[property="og:video"]
+   * meta[property="og:video:url"]
+   * JSON inside <script> tags
+   * window.**APOLLO_STATE** or similar data
+
+6. Extract:
+
+   * Direct video URL (MP4)
+   * Thumbnail
+   * Title (if available)
+
+7. Validate video URL (status 200)
+
+========================
+📡 API DESIGN
+=============
+
+POST /api/download
+
+Request:
+{
+"url": "https://www.kuaishou.com/..."
+}
+
+Response:
+{
+"status": "success",
+"title": "video title",
+"thumbnail": "thumbnail_url",
+"video_url": "direct_video_url",
+"quality": "HD"
+}
+
+Error Response:
+{
+"status": "error",
+"message": "Invalid or unsupported link"
+}
+
+========================
+🎨 FRONTEND FEATURES
+====================
+
+* Input box (paste URL)
+* Fetch button
+* Loader animation (while scraping)
+* Video preview player
+* Thumbnail preview
+* Download button
+* Copy link button
+* Error messages
+
+UX:
+
+* Clean, minimal UI
+* Mobile responsive
+* Fast interaction (<10 seconds)
+
+========================
+⚡ PERFORMANCE OPTIMIZATION
+==========================
+
+* Use caching (Redis or in-memory)
+* Avoid duplicate scraping
+* Timeout handling (max 10 sec)
+* Lazy loading for video preview
+
+========================
+🔐 SECURITY
+===========
+
+* Rate limiting (prevent abuse)
+* Input sanitization
+* Block non-Kuaishou URLs
+* Handle bot detection
+
+========================
+🚀 ADVANCED FEATURES (OPTIONAL)
+===============================
+
+* Remove watermark (analyze raw video source)
+* Multiple quality options
+* Batch downloads
+* Download history
+* Progressive Web App (PWA)
+
+========================
+📁 PROJECT STRUCTURE
+====================
+
+/frontend
+/backend
+/routes
+/controllers
+/services (scraper logic)
+/utils
+
+========================
+🌍 DEPLOYMENT
+=============
+
+Frontend:
+
+* Vercel / Netlify
+
+Backend:
+
+* Railway / Render
+
+========================
+📤 OUTPUT REQUIRED
+==================
+
+1. Full working code (frontend + backend)
+2. Scraper logic clearly explained
+3. Setup instructions
+4. Deployment steps
+5. Environment variables config
+
+========================
+⚠️ IMPORTANT RULES
+==================
+
+* DO NOT use any official API
+* ONLY scraping techniques allowed
+* Code must be clean and modular
+* Handle edge cases (private video, deleted video)
+* Ensure video preview works before download
+
+Build this as a real-world production-ready SaaS-grade application.

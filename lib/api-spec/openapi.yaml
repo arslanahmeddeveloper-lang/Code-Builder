@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: download
+    description: Video download operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,75 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /download:
+    post:
+      operationId: downloadVideo
+      tags: [download]
+      summary: Download video
+      description: Extract video URL and metadata from a Kuaishou URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DownloadRequest"
+      responses:
+        "200":
+          description: Video info extracted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadResponse"
+        "400":
+          description: Invalid URL or request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Video not found or unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /proxy-video:
+    get:
+      operationId: proxyVideo
+      tags: [download]
+      summary: Proxy video for download
+      description: Proxy a video URL through the server for download
+      parameters:
+        - name: url
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Video stream
+          content:
+            video/mp4:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Invalid URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +104,50 @@ components:
           type: string
       required:
         - status
-
+    DownloadRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          description: Kuaishou video URL
+      required:
+        - url
+    DownloadResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [success]
+        title:
+          type: string
+          nullable: true
+        thumbnail:
+          type: string
+          nullable: true
+        video_url:
+          type: string
+        quality:
+          type: string
+        author:
+          type: string
+          nullable: true
+        duration:
+          type: number
+          nullable: true
+        cached:
+          type: boolean
+      required:
+        - status
+        - video_url
+        - quality
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [error]
+        message:
+          type: string
+      required:
+        - status
+        - message
