@@ -1,15 +1,21 @@
-import express, { type Express } from "express";
+import express, { type Express, type RequestHandler } from "express";
 import cors from "cors";
-import pinoHttp from "pino-http";
+import type { Options as PinoHttpOptions } from "pino-http";
 import type { IncomingMessage, ServerResponse } from "http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+
+// pino-http@10 uses `export =` which is not callable as a default import under
+// moduleResolution:"bundler". We load it through require (always available in our
+// esbuild bundle via the banner shim) and cast to the correct type.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const pinoHttp: unknown = (globalThis as any).require("pino-http");
 
 const app: Express = express();
 app.set("trust proxy", 1);
 
 app.use(
-  pinoHttp({
+  (pinoHttp as unknown as (opts: PinoHttpOptions) => RequestHandler)({
     logger,
     serializers: {
       req(req: IncomingMessage & { id?: string | number }) {

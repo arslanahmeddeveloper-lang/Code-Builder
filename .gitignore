@@ -5,6 +5,9 @@ dist
 tmp
 out-tsc
 *.tsbuildinfo
+# lib/api-zod dist must be committed so Vercel's tsc step can resolve workspace types
+!lib/api-zod/dist/
+!lib/api-zod/dist/**
 .expo
 .expo-shared
 
