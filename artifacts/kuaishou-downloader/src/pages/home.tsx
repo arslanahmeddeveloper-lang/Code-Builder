@@ -11,6 +11,7 @@ import { Loader2, Download, Copy, Play, Zap, AlertCircle, ArrowRight } from "luc
 export default function Home() {
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
   
   const downloadMutation = useDownloadVideo();
   
@@ -50,19 +51,30 @@ export default function Home() {
     );
   };
   
-  const handleFileDownload = (videoUrl: string) => {
-    const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoUrl)}`;
+  const handleFileDownload = async (videoUrl: string) => {
+    if (isDownloading) return;
     const filename = videoUrl.includes("kwai") ? "kwai-video.mp4" : "kuaishou-video.mp4";
-    const a = document.createElement("a");
-    a.href = proxyUrl;
-    a.download = filename;
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    toast.success("Download started!", {
-      description: "Your video is downloading.",
-    });
+    const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoUrl)}`;
+    setIsDownloading(true);
+    toast.loading("Downloading video…", { id: "dl", description: "Please wait, fetching file." });
+    try {
+      const response = await fetch(proxyUrl);
+      if (!response.ok) throw new Error(`Server returned ${response.status}`);
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+      toast.success("Download complete!", { id: "dl", description: `Saved as ${filename}` });
+    } catch (err) {
+      toast.error("Download failed", { id: "dl", description: "Could not download the video. Please try again." });
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   const handleCopyLink = (videoUrl: string) => {
@@ -209,10 +221,20 @@ export default function Home() {
                         size="lg" 
                         className="flex-1 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 font-medium h-14"
                         data-testid="button-download"
+                        disabled={isDownloading}
                         onClick={() => handleFileDownload(downloadMutation.data.video_url)}
                       >
-                        <Download className="w-5 h-5 mr-2" />
-                        Download File
+                        {isDownloading ? (
+                          <>
+                            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                            Downloading…
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-5 h-5 mr-2" />
+                            Download File
+                          </>
+                        )}
                       </Button>
                       <Button 
                         type="button" 
