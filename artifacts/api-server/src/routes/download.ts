@@ -71,7 +71,11 @@ router.get("/proxy-video", proxyLimiter, async (req, res) => {
   try {
     videoUrl = decodeURIComponent(url);
     const parsed = new URL(videoUrl);
-    const validHosts = ["kuaishou.com", "ks3cdn.com", "kspkg.com", "kuaishoupkg.com", "gifshow.com"];
+    const validHosts = [
+      "kuaishou.com", "ks3cdn.com", "kspkg.com", "kuaishoupkg.com", "gifshow.com",
+      "kwai.com", "kwai.app", "kwai-video.com", "kwaicdn.com", "akwai.com",
+      "tx3-upos-sz-staticks.snssdk.com", "v19-webapp.tiktok.com",
+    ];
     const isValid = validHosts.some(
       (h) => parsed.hostname === h || parsed.hostname.endsWith(`.${h}`),
     );
@@ -89,7 +93,7 @@ router.get("/proxy-video", proxyLimiter, async (req, res) => {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Referer: "https://www.kuaishou.com/",
+        Referer: videoUrl.includes("kwai") ? "https://www.kwai.com/" : "https://www.kuaishou.com/",
         Range: req.headers.range || "bytes=0-",
       },
       maxRedirects: 10,
@@ -103,7 +107,8 @@ router.get("/proxy-video", proxyLimiter, async (req, res) => {
 
     res.status(statusCode === 206 ? 206 : 200);
     res.setHeader("Content-Type", contentType);
-    res.setHeader("Content-Disposition", 'attachment; filename="kuaishou-video.mp4"');
+    const filename = videoUrl.includes("kwai") ? "kwai-video.mp4" : "kuaishou-video.mp4";
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("Cache-Control", "no-cache");
 

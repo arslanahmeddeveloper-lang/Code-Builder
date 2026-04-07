@@ -17,13 +17,15 @@ export default function Home() {
   const handleDownload = (e: React.FormEvent) => {
     e.preventDefault();
     if (!url) {
-      setError("Please enter a Kuaishou URL");
+      setError("Please enter a Kuaishou or Kwai video URL");
       return;
     }
     
-    // Basic validation
-    if (!url.includes("kuaishou.com")) {
-      setError("Please enter a valid Kuaishou URL (e.g., v.kuaishou.com/...)");
+    // Basic validation — accept both Kuaishou and Kwai
+    const isKuaishou = url.includes("kuaishou.com") || url.includes("gifshow.com");
+    const isKwai = url.includes("kwai.com") || url.includes("kwai.app");
+    if (!isKuaishou && !isKwai) {
+      setError("Please enter a valid Kuaishou or Kwai video URL");
       return;
     }
     
@@ -90,7 +92,7 @@ export default function Home() {
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-primary/50">friction.</span>
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground max-w-xl mx-auto">
-              The fastest, cleanest way to save Kuaishou videos. No clutter, no ads, just paste and download in original quality.
+              The fastest, cleanest way to save Kuaishou and Kwai videos. No clutter, no ads, just paste and download in original quality.
             </p>
           </div>
 
@@ -100,7 +102,7 @@ export default function Home() {
                 <div className="relative flex-1">
                   <Input
                     type="url"
-                    placeholder="https://v.kuaishou.com/..."
+                    placeholder="https://v.kuaishou.com/... or https://kwai.com/..."
                     className="w-full h-14 md:h-16 pl-6 pr-4 bg-white/5 border-white/10 text-lg md:text-xl placeholder:text-muted-foreground/50 focus-visible:ring-primary/50 focus-visible:border-primary rounded-xl transition-all"
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
@@ -223,7 +225,7 @@ export default function Home() {
       </main>
 
       <footer className="py-6 text-center text-muted-foreground text-sm relative z-10">
-        <p>© {new Date().getFullYear()} KSD. This tool is not affiliated with Kuaishou.</p>
+        <p>© {new Date().getFullYear()} KSD. This tool is not affiliated with Kuaishou or Kwai.</p>
       </footer>
     </div>
   );
