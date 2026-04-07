@@ -141,11 +141,14 @@ router.get("/proxy-video", proxyLimiter, async (req, res) => {
         res.status(500).json({ status: "error", message: "Failed to stream video." });
       }
     });
+
+    return;
   } catch (err) {
     req.log.error({ err, videoUrl }, "Failed to proxy video");
     if (!res.headersSent) {
       res.status(500).json({ status: "error", message: "Failed to fetch video for download." });
     }
+    return;
   }
 });
 
