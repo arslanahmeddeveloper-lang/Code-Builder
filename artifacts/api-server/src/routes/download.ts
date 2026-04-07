@@ -74,7 +74,9 @@ router.get("/proxy-video", proxyLimiter, async (req, res) => {
     const validHosts = [
       "kuaishou.com", "ks3cdn.com", "kspkg.com", "kuaishoupkg.com", "gifshow.com",
       "kwai.com", "kwai.app", "kwai-video.com", "kwaicdn.com", "akwai.com",
-      "tx3-upos-sz-staticks.snssdk.com", "v19-webapp.tiktok.com",
+      "kwai.net", "ak-br-cdn.kwai.net", "aws-us-cdn.kwai.net", "aws-br-cdn.kwai.net",
+      "ak-br-pic.kwai.net", "aws-us-pic.kwai.net", "p1-kimg.kwai.net", "p15-kimg.kwai.net",
+      "ak-static.kwai.net", "cdn-static.kwai.net",
     ];
     const isValid = validHosts.some(
       (h) => parsed.hostname === h || parsed.hostname.endsWith(`.${h}`),

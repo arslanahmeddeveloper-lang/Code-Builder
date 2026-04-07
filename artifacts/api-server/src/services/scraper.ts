@@ -318,25 +318,79 @@ async function scrapeKuaishouUrl(url: string): Promise<VideoInfo> {
   throw new Error("Video not found. The video may be private, deleted, or the URL format is not supported.");
 }
 
+function extractVideoFromKwaiNuxt(html: string): VideoInfo | null {
+  const idx = html.indexOf("__NUXT__=");
+  if (idx === -1) return null;
+
+  const endIdx = html.indexOf("</script>", idx);
+  const block = endIdx !== -1 ? html.substring(idx + 9, endIdx) : html.substring(idx + 9);
+
+  // Kwai __NUXT__ stores URLs as JS unicode escapes: https:\u002F\u002Fak-br-cdn.kwai.net\u002F...
+  // The regex matches those literal \u002F sequences in the raw script text
+  const decodeKwaiUrl = (raw: string) => raw.replace(/\\u002F/g, "/");
+
+  // 1. Extract from main_mv_urls (highest quality, unwatermarked)
+  const mainMvMatch = block.match(/main_mv_urls:\s*\[\s*\{[^}]*url:"([^"]+\.mp4[^"]*)"/);
+  if (mainMvMatch) {
+    const videoUrl = decodeKwaiUrl(mainMvMatch[1]);
+    // Also try to get title and thumbnail from og meta
+    const titleMatch = html.match(/property="og:title"[^>]*content="([^"]+)"/);
+    const thumbMatch = html.match(/property="og:image"[^>]*content="([^"]+)"/);
+    const authorMatch = html.match(/kwai_id:"([^"]+)"/);
+    return {
+      title: titleMatch ? titleMatch[1] : null,
+      thumbnail: thumbMatch ? thumbMatch[1] : null,
+      video_url: videoUrl,
+      quality: "HD",
+      author: authorMatch ? authorMatch[1] : null,
+      duration: null,
+    };
+  }
+
+  // 2. Fallback: find any .mp4 URL in the block
+  const anyMp4 = block.match(/url:"(https:\\u002F\\u002F[^"]+\.mp4[^"]*)"/);
+  if (anyMp4) {
+    const videoUrl = decodeKwaiUrl(anyMp4[1]);
+    const titleMatch = html.match(/property="og:title"[^>]*content="([^"]+)"/);
+    const thumbMatch = html.match(/property="og:image"[^>]*content="([^"]+)"/);
+    return {
+      title: titleMatch ? titleMatch[1] : null,
+      thumbnail: thumbMatch ? thumbMatch[1] : null,
+      video_url: videoUrl,
+      quality: "HD",
+      author: null,
+      duration: null,
+    };
+  }
+
+  return null;
+}
+
 async function scrapeKwaiUrl(url: string): Promise<VideoInfo> {
   const normalizedUrl = url
     .replace("share.kwai.app", "www.kwai.com")
     .replace("v.kwai.com", "www.kwai.com")
     .replace("m.kwai.com", "www.kwai.com");
 
-  const mobileResponse = await axios.get(normalizedUrl, {
+  const desktopResponse = await axios.get(normalizedUrl, {
     headers: {
-      ...MOBILE_HEADERS,
+      ...DESKTOP_HEADERS,
+      Referer: "https://www.kwai.com/",
       "Accept-Language": "en-US,en;q=0.9",
     },
     maxRedirects: 10,
-    timeout: 12000,
+    timeout: 14000,
     validateStatus: (s) => s < 500,
   });
 
-  const html = mobileResponse.data as string;
+  const html = desktopResponse.data as string;
   const $ = cheerio.load(html);
 
+  // Primary: __NUXT__ state contains main_mv_urls with direct video links
+  const nuxtResult = extractVideoFromKwaiNuxt(html);
+  if (nuxtResult) return nuxtResult;
+
+  // Secondary: og:video meta tag
   const ogVideoUrl =
     $('meta[property="og:video"]').attr("content") ||
     $('meta[property="og:video:url"]').attr("content") ||
@@ -349,82 +403,30 @@ async function scrapeKwaiUrl(url: string): Promise<VideoInfo> {
       thumbnail: $('meta[property="og:image"]').attr("content") || $('meta[name="twitter:image"]').attr("content") || null,
       video_url: ogVideoUrl,
       quality: "HD",
-      author: $('meta[property="og:site_name"]').attr("content") || null,
+      author: null,
       duration: null,
     };
   }
 
-  const scripts = $("script").toArray();
-  for (const script of scripts) {
-    const content = $(script).html() || "";
-
-    if (content.includes("playUrls") || content.includes("srcNoMark") || content.includes("videoUrl")) {
-      const jsonBlocks = content.match(/\{[\s\S]{20,5000}\}/g) || [];
-      for (const block of jsonBlocks) {
-        try {
-          const obj = JSON.parse(block);
-          const candidate =
-            obj.playUrls?.[0] ||
-            obj.srcNoMark ||
-            obj.videoUrl ||
-            obj.mp4Url ||
-            obj.url;
-          if (candidate && typeof candidate === "string" && candidate.startsWith("http") && (candidate.includes("mp4") || candidate.includes("video"))) {
-            return {
-              title: obj.caption || obj.title || obj.desc || null,
-              thumbnail: obj.coverUrl || obj.thumbnail || obj.cover || null,
-              video_url: candidate,
-              quality: "HD",
-              author: obj.authorName || obj.userName || null,
-              duration: obj.duration || null,
-            };
-          }
-        } catch {
-          continue;
-        }
-      }
-    }
-
-    if (content.includes("__NEXT_DATA__") || content.includes("window.__data")) {
-      const match = content.match(/(?:window\.__data|__NEXT_DATA__)\s*=\s*(\{[\s\S]+?\})\s*;?\s*(?:<\/script>|window\.|$)/);
-      if (match) {
-        try {
-          const state = JSON.parse(match[1]);
-          const videoUrl = deepFindVideoUrl(state);
-          if (videoUrl) {
-            return {
-              title: null,
-              thumbnail: null,
-              video_url: videoUrl,
-              quality: "HD",
-              author: null,
-              duration: null,
-            };
-          }
-        } catch {
-        }
-      }
-    }
-  }
-
-  const desktopResponse = await axios.get(normalizedUrl, {
+  // Tertiary: try mobile URL
+  const mobileResponse = await axios.get(normalizedUrl, {
     headers: {
-      ...DESKTOP_HEADERS,
-      Referer: "https://www.kwai.com/",
+      ...MOBILE_HEADERS,
       "Accept-Language": "en-US,en;q=0.9",
     },
     maxRedirects: 10,
-    timeout: 10000,
+    timeout: 12000,
     validateStatus: (s) => s < 500,
   });
 
-  const html2 = desktopResponse.data as string;
-  const $2 = cheerio.load(html2);
+  const html2 = mobileResponse.data as string;
+  const nuxtResult2 = extractVideoFromKwaiNuxt(html2);
+  if (nuxtResult2) return nuxtResult2;
 
+  const $2 = cheerio.load(html2);
   const ogVideo2 =
     $2('meta[property="og:video"]').attr("content") ||
-    $2('meta[property="og:video:url"]').attr("content") ||
-    $2('meta[property="og:video:secure_url"]').attr("content");
+    $2('meta[property="og:video:url"]').attr("content");
 
   if (ogVideo2 && ogVideo2.startsWith("http")) {
     return {
@@ -436,9 +438,6 @@ async function scrapeKwaiUrl(url: string): Promise<VideoInfo> {
       duration: null,
     };
   }
-
-  const scriptResult2 = parseScriptsForVideo(html2, $2);
-  if (scriptResult2) return scriptResult2;
 
   throw new Error("Video not found. The video may be private, deleted, or the URL format is not supported.");
 }
