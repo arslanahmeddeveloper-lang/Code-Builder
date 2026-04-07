@@ -51,30 +51,26 @@ export default function Home() {
     );
   };
   
-  const handleFileDownload = async (videoUrl: string) => {
+  const handleFileDownload = (videoUrl: string) => {
     if (isDownloading) return;
     const filename = videoUrl.includes("kwai") ? "kwai-video.mp4" : "kuaishou-video.mp4";
-    const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoUrl)}`;
+    const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoUrl)}&filename=${encodeURIComponent(filename)}`;
     setIsDownloading(true);
-    toast.loading("Downloading video…", { id: "dl", description: "Please wait, fetching file." });
-    try {
-      const response = await fetch(proxyUrl);
-      if (!response.ok) throw new Error(`Server returned ${response.status}`);
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = objectUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
-      toast.success("Download complete!", { id: "dl", description: `Saved as ${filename}` });
-    } catch (err) {
-      toast.error("Download failed", { id: "dl", description: "Could not download the video. Please try again." });
-    } finally {
-      setIsDownloading(false);
-    }
+
+    // Direct streaming download — browser saves to disk immediately with native progress.
+    // This is much faster than buffering the whole file into a blob first.
+    const a = document.createElement("a");
+    a.href = proxyUrl;
+    a.download = filename;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    toast.success("Download started!", { description: "Check your downloads folder." });
+
+    // Re-enable button after a short delay to prevent double-clicks
+    setTimeout(() => setIsDownloading(false), 3000);
   };
 
   const handleCopyLink = (videoUrl: string) => {

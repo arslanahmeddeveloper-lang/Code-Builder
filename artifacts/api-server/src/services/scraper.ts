@@ -1,5 +1,11 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
+import http from "http";
+import https from "https";
+
+const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 20 });
+const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 20 });
+const axiosInstance = axios.create({ httpAgent, httpsAgent });
 
 interface VideoInfo {
   title: string | null;
@@ -257,63 +263,53 @@ function parseScriptsForVideo(html: string, $: cheerio.CheerioAPI): VideoInfo | 
 }
 
 async function scrapeKuaishouUrl(url: string): Promise<VideoInfo> {
-  const mobileResponse = await axios.get(url, {
-    headers: MOBILE_HEADERS,
-    maxRedirects: 10,
-    timeout: 12000,
-    validateStatus: (s) => s < 500,
-  });
-
-  const html = mobileResponse.data as string;
-  const $ = cheerio.load(html);
-
-  const ogVideoUrl =
-    $('meta[property="og:video"]').attr("content") ||
-    $('meta[property="og:video:url"]').attr("content") ||
-    $('meta[name="twitter:player:stream"]').attr("content");
-
-  if (ogVideoUrl && ogVideoUrl.startsWith("http")) {
-    return {
-      title: $('meta[property="og:title"]').attr("content") || $("title").text() || null,
-      thumbnail: $('meta[property="og:image"]').attr("content") || $('meta[name="twitter:image"]').attr("content") || null,
-      video_url: ogVideoUrl,
-      quality: "HD",
-      author: null,
-      duration: null,
-    };
-  }
-
-  const scriptResult = parseScriptsForVideo(html, $);
-  if (scriptResult) return scriptResult;
-
   const desktopUrl = url.replace("m.kuaishou.com", "www.kuaishou.com");
-  const desktopResponse = await axios.get(desktopUrl, {
-    headers: { ...DESKTOP_HEADERS, Referer: "https://www.kuaishou.com/" },
-    maxRedirects: 10,
-    timeout: 10000,
-    validateStatus: (s) => s < 500,
-  });
 
-  const html2 = desktopResponse.data as string;
-  const $2 = cheerio.load(html2);
+  const [mobileResult, desktopResult] = await Promise.allSettled([
+    axiosInstance.get(url, {
+      headers: MOBILE_HEADERS,
+      maxRedirects: 10,
+      timeout: 8000,
+      validateStatus: (s) => s < 500,
+    }),
+    axiosInstance.get(desktopUrl, {
+      headers: { ...DESKTOP_HEADERS, Referer: "https://www.kuaishou.com/" },
+      maxRedirects: 10,
+      timeout: 8000,
+      validateStatus: (s) => s < 500,
+    }),
+  ]);
 
-  const ogVideo2 =
-    $2('meta[property="og:video"]').attr("content") ||
-    $2('meta[property="og:video:url"]').attr("content");
+  const responses: string[] = [];
+  if (mobileResult.status === "fulfilled") responses.push(mobileResult.value.data as string);
+  if (desktopResult.status === "fulfilled") responses.push(desktopResult.value.data as string);
 
-  if (ogVideo2 && ogVideo2.startsWith("http")) {
-    return {
-      title: $2('meta[property="og:title"]').attr("content") || null,
-      thumbnail: $2('meta[property="og:image"]').attr("content") || null,
-      video_url: ogVideo2,
-      quality: "HD",
-      author: null,
-      duration: null,
-    };
+  if (responses.length === 0) {
+    throw new Error("Failed to fetch the video page. Please check the URL and try again.");
   }
 
-  const scriptResult2 = parseScriptsForVideo(html2, $2);
-  if (scriptResult2) return scriptResult2;
+  for (const html of responses) {
+    const $ = cheerio.load(html);
+
+    const ogVideoUrl =
+      $('meta[property="og:video"]').attr("content") ||
+      $('meta[property="og:video:url"]').attr("content") ||
+      $('meta[name="twitter:player:stream"]').attr("content");
+
+    if (ogVideoUrl && ogVideoUrl.startsWith("http")) {
+      return {
+        title: $('meta[property="og:title"]').attr("content") || $("title").text() || null,
+        thumbnail: $('meta[property="og:image"]').attr("content") || $('meta[name="twitter:image"]').attr("content") || null,
+        video_url: ogVideoUrl,
+        quality: "HD",
+        author: null,
+        duration: null,
+      };
+    }
+
+    const scriptResult = parseScriptsForVideo(html, $);
+    if (scriptResult) return scriptResult;
+  }
 
   throw new Error("Video not found. The video may be private, deleted, or the URL format is not supported.");
 }
@@ -411,35 +407,14 @@ function extractVideoFromKwaiNuxt(html: string): VideoInfo | null {
   return null;
 }
 
-async function scrapeKwaiUrl(url: string): Promise<VideoInfo> {
-  const normalizedUrl = url
-    .replace("share.kwai.app", "www.kwai.com")
-    .replace("v.kwai.com", "www.kwai.com")
-    .replace("m.kwai.com", "www.kwai.com");
+function tryExtractFromHtml(html: string): VideoInfo | null {
+  const jsonLd = extractVideoFromKwaiJsonLd(html);
+  if (jsonLd) return jsonLd;
 
-  const desktopResponse = await axios.get(normalizedUrl, {
-    headers: {
-      ...DESKTOP_HEADERS,
-      Referer: "https://www.kwai.com/",
-      "Accept-Language": "en-US,en;q=0.9",
-    },
-    maxRedirects: 10,
-    timeout: 14000,
-    validateStatus: (s) => s < 500,
-  });
+  const nuxt = extractVideoFromKwaiNuxt(html);
+  if (nuxt) return nuxt;
 
-  const html = desktopResponse.data as string;
   const $ = cheerio.load(html);
-
-  // Primary: JSON-LD VideoObject (complete metadata: title, author, duration, thumbnail, video URL)
-  const jsonLdResult = extractVideoFromKwaiJsonLd(html);
-  if (jsonLdResult) return jsonLdResult;
-
-  // Secondary: __NUXT__ state — direct video URL extraction
-  const nuxtResult = extractVideoFromKwaiNuxt(html);
-  if (nuxtResult) return nuxtResult;
-
-  // Secondary: og:video meta tag
   const ogVideoUrl =
     $('meta[property="og:video"]').attr("content") ||
     $('meta[property="og:video:url"]').attr("content") ||
@@ -457,37 +432,39 @@ async function scrapeKwaiUrl(url: string): Promise<VideoInfo> {
     };
   }
 
-  // Tertiary: try mobile URL
-  const mobileResponse = await axios.get(normalizedUrl, {
-    headers: {
-      ...MOBILE_HEADERS,
-      "Accept-Language": "en-US,en;q=0.9",
-    },
-    maxRedirects: 10,
-    timeout: 12000,
-    validateStatus: (s) => s < 500,
-  });
+  return null;
+}
 
-  const html2 = mobileResponse.data as string;
-  const jsonLdResult2 = extractVideoFromKwaiJsonLd(html2);
-  if (jsonLdResult2) return jsonLdResult2;
-  const nuxtResult2 = extractVideoFromKwaiNuxt(html2);
-  if (nuxtResult2) return nuxtResult2;
+async function scrapeKwaiUrl(url: string): Promise<VideoInfo> {
+  const normalizedUrl = url
+    .replace("share.kwai.app", "www.kwai.com")
+    .replace("v.kwai.com", "www.kwai.com")
+    .replace("m.kwai.com", "www.kwai.com");
 
-  const $2 = cheerio.load(html2);
-  const ogVideo2 =
-    $2('meta[property="og:video"]').attr("content") ||
-    $2('meta[property="og:video:url"]').attr("content");
+  const fetchOpts = { maxRedirects: 10, timeout: 8000, validateStatus: (s: number) => s < 500 } as const;
 
-  if (ogVideo2 && ogVideo2.startsWith("http")) {
-    return {
-      title: $2('meta[property="og:title"]').attr("content") || null,
-      thumbnail: $2('meta[property="og:image"]').attr("content") || null,
-      video_url: ogVideo2,
-      quality: "HD",
-      author: null,
-      duration: null,
-    };
+  const [desktopResult, mobileResult] = await Promise.allSettled([
+    axiosInstance.get(normalizedUrl, {
+      ...fetchOpts,
+      headers: { ...DESKTOP_HEADERS, Referer: "https://www.kwai.com/", "Accept-Language": "en-US,en;q=0.9" },
+    }),
+    axiosInstance.get(normalizedUrl, {
+      ...fetchOpts,
+      headers: { ...MOBILE_HEADERS, "Accept-Language": "en-US,en;q=0.9" },
+    }),
+  ]);
+
+  const htmls: string[] = [];
+  if (desktopResult.status === "fulfilled") htmls.push(desktopResult.value.data as string);
+  if (mobileResult.status === "fulfilled") htmls.push(mobileResult.value.data as string);
+
+  if (htmls.length === 0) {
+    throw new Error("Failed to fetch the video page. Please check the URL and try again.");
+  }
+
+  for (const html of htmls) {
+    const result = tryExtractFromHtml(html);
+    if (result) return result;
   }
 
   throw new Error("Video not found. The video may be private, deleted, or the URL format is not supported.");

@@ -1,8 +1,15 @@
 import { Router } from "express";
 import { rateLimit } from "express-rate-limit";
 import axios from "axios";
+import http from "http";
+import https from "https";
 import { extractVideo } from "../services/scraper";
 import { DownloadVideoBody, ProxyVideoQueryParams } from "@workspace/api-zod";
+
+const proxyAxios = axios.create({
+  httpAgent: new http.Agent({ keepAlive: true, maxSockets: 50 }),
+  httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 50 }),
+});
 
 const router = Router();
 
@@ -88,15 +95,21 @@ router.get("/proxy-video", proxyLimiter, async (req, res) => {
     return res.status(400).json({ status: "error", message: "Malformed video URL." });
   }
 
+  const safeFilename = (() => {
+    const qf = typeof req.query.filename === "string" ? req.query.filename : "";
+    if (qf && /^[\w\-. ]+\.mp4$/i.test(qf)) return qf;
+    return videoUrl.includes("kwai") ? "kwai-video.mp4" : "kuaishou-video.mp4";
+  })();
+
   try {
-    const response = await axios.get(videoUrl, {
+    const response = await proxyAxios.get(videoUrl, {
       responseType: "stream",
       timeout: 30000,
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         Referer: videoUrl.includes("kwai") ? "https://www.kwai.com/" : "https://www.kuaishou.com/",
-        Range: req.headers.range || "bytes=0-",
+        ...(req.headers.range ? { Range: req.headers.range } : {}),
       },
       maxRedirects: 10,
       validateStatus: (s) => s < 500,
@@ -109,8 +122,7 @@ router.get("/proxy-video", proxyLimiter, async (req, res) => {
 
     res.status(statusCode === 206 ? 206 : 200);
     res.setHeader("Content-Type", contentType);
-    const filename = videoUrl.includes("kwai") ? "kwai-video.mp4" : "kuaishou-video.mp4";
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
     res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("Cache-Control", "no-cache");
 
