@@ -318,6 +318,54 @@ async function scrapeKuaishouUrl(url: string): Promise<VideoInfo> {
   throw new Error("Video not found. The video may be private, deleted, or the URL format is not supported.");
 }
 
+function parseIsoDuration(iso: string): number | null {
+  const m = iso.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/);
+  if (!m) return null;
+  const h = parseFloat(m[1] || "0");
+  const min = parseFloat(m[2] || "0");
+  const sec = parseFloat(m[3] || "0");
+  const total = h * 3600 + min * 60 + sec;
+  return total > 0 ? Math.round(total * 1000) : null;
+}
+
+function extractVideoFromKwaiJsonLd(html: string): VideoInfo | null {
+  const ldJsonPattern = /<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g;
+  let match: RegExpExecArray | null;
+  while ((match = ldJsonPattern.exec(html)) !== null) {
+    try {
+      const obj = JSON.parse(match[1]);
+      if (obj["@type"] !== "VideoObject") continue;
+
+      const videoUrl: string | null = obj.contentUrl || null;
+      if (!videoUrl || !videoUrl.startsWith("http")) continue;
+
+      const title: string | null =
+        obj.description || obj.name || null;
+      const thumbnail: string | null = Array.isArray(obj.thumbnailUrl)
+        ? obj.thumbnailUrl[0] || null
+        : obj.thumbnailUrl || null;
+      const duration: number | null = obj.duration
+        ? parseIsoDuration(obj.duration)
+        : null;
+      const author: string | null =
+        obj.creator?.mainEntity?.name ||
+        obj.creator?.mainEntity?.alternateName ||
+        obj.audio?.author ||
+        null;
+      const width: number | null = obj.width || null;
+      const height: number | null = obj.height || null;
+      const quality = width && height
+        ? (height >= 1080 ? "FHD" : height >= 720 ? "HD" : "SD")
+        : "HD";
+
+      return { title, thumbnail, video_url: videoUrl, quality, author, duration };
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 function extractVideoFromKwaiNuxt(html: string): VideoInfo | null {
   const idx = html.indexOf("__NUXT__=");
   if (idx === -1) return null;
@@ -326,28 +374,25 @@ function extractVideoFromKwaiNuxt(html: string): VideoInfo | null {
   const block = endIdx !== -1 ? html.substring(idx + 9, endIdx) : html.substring(idx + 9);
 
   // Kwai __NUXT__ stores URLs as JS unicode escapes: https:\u002F\u002Fak-br-cdn.kwai.net\u002F...
-  // The regex matches those literal \u002F sequences in the raw script text
   const decodeKwaiUrl = (raw: string) => raw.replace(/\\u002F/g, "/");
 
-  // 1. Extract from main_mv_urls (highest quality, unwatermarked)
+  // Extract from main_mv_urls (highest quality, unwatermarked)
   const mainMvMatch = block.match(/main_mv_urls:\s*\[\s*\{[^}]*url:"([^"]+\.mp4[^"]*)"/);
   if (mainMvMatch) {
     const videoUrl = decodeKwaiUrl(mainMvMatch[1]);
-    // Also try to get title and thumbnail from og meta
     const titleMatch = html.match(/property="og:title"[^>]*content="([^"]+)"/);
     const thumbMatch = html.match(/property="og:image"[^>]*content="([^"]+)"/);
-    const authorMatch = html.match(/kwai_id:"([^"]+)"/);
     return {
       title: titleMatch ? titleMatch[1] : null,
       thumbnail: thumbMatch ? thumbMatch[1] : null,
       video_url: videoUrl,
       quality: "HD",
-      author: authorMatch ? authorMatch[1] : null,
+      author: null,
       duration: null,
     };
   }
 
-  // 2. Fallback: find any .mp4 URL in the block
+  // Fallback: find any .mp4 URL in the block
   const anyMp4 = block.match(/url:"(https:\\u002F\\u002F[^"]+\.mp4[^"]*)"/);
   if (anyMp4) {
     const videoUrl = decodeKwaiUrl(anyMp4[1]);
@@ -386,7 +431,11 @@ async function scrapeKwaiUrl(url: string): Promise<VideoInfo> {
   const html = desktopResponse.data as string;
   const $ = cheerio.load(html);
 
-  // Primary: __NUXT__ state contains main_mv_urls with direct video links
+  // Primary: JSON-LD VideoObject (complete metadata: title, author, duration, thumbnail, video URL)
+  const jsonLdResult = extractVideoFromKwaiJsonLd(html);
+  if (jsonLdResult) return jsonLdResult;
+
+  // Secondary: __NUXT__ state — direct video URL extraction
   const nuxtResult = extractVideoFromKwaiNuxt(html);
   if (nuxtResult) return nuxtResult;
 
@@ -420,6 +469,8 @@ async function scrapeKwaiUrl(url: string): Promise<VideoInfo> {
   });
 
   const html2 = mobileResponse.data as string;
+  const jsonLdResult2 = extractVideoFromKwaiJsonLd(html2);
+  if (jsonLdResult2) return jsonLdResult2;
   const nuxtResult2 = extractVideoFromKwaiNuxt(html2);
   if (nuxtResult2) return nuxtResult2;
 

@@ -205,6 +205,16 @@ export default function Home() {
                         <Badge variant="secondary" className="bg-white/10 hover:bg-white/20 text-white border-0">
                           {downloadMutation.data.quality || "HD"}
                         </Badge>
+                        {downloadMutation.data.duration != null && (
+                          <Badge variant="secondary" className="bg-white/10 hover:bg-white/20 text-white border-0">
+                            {(() => {
+                              const s = Math.round(downloadMutation.data.duration / 1000);
+                              const m = Math.floor(s / 60);
+                              const sec = s % 60;
+                              return `${m}:${String(sec).padStart(2, "0")}`;
+                            })()}
+                          </Badge>
+                        )}
                         {downloadMutation.data.author && (
                           <Badge variant="outline" className="border-white/10 text-muted-foreground">
                             @ {downloadMutation.data.author}
