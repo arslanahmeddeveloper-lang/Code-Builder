@@ -56,6 +56,9 @@ const KUAISHOU_DOMAINS = [
   "m.kuaishou.com",
   "gifshow.com",
   "www.gifshow.com",
+  "chenzhongtech.com",
+  "v.m.chenzhongtech.com",
+  "m.chenzhongtech.com",
 ];
 
 const KWAI_DOMAINS = [
@@ -262,6 +265,42 @@ function parseScriptsForVideo(html: string, $: cheerio.CheerioAPI): VideoInfo | 
   return null;
 }
 
+function decodeUnicodeEscapes(s: string): string {
+  return s.replace(/\\u([0-9a-fA-F]{4})/g, (_, code) => String.fromCharCode(parseInt(code, 16)));
+}
+
+// Handles Kuaishou mobile share pages (v.m.chenzhongtech.com, m.chenzhongtech.com)
+// which embed video data in window.INIT_STATE with adaptationSet → representation → backupUrl
+function extractVideoFromKuaishouSharePage(html: string): VideoInfo | null {
+  // Video URLs are in backupUrl arrays — grab the first .mp4 URL
+  const backupUrlMatch = html.match(/"backupUrl":\["(https:\/\/[^"]+\.mp4[^"]*)"/);
+  if (!backupUrlMatch) return null;
+
+  const videoUrl = decodeUnicodeEscapes(backupUrlMatch[1]);
+  if (!videoUrl.startsWith("http")) return null;
+
+  // Extract metadata
+  const captionMatch = html.match(/"caption":"((?:[^"\\]|\\.)*)"/);
+  const userNameMatch = html.match(/"userName":"((?:[^"\\]|\\.)*)"/);
+  const coverUrlMatch =
+    html.match(/"coverUrls":\[.*?"url":"(https?:\/\/[^"]+)"/) ||
+    html.match(/"coverUrl":"(https?:\/\/[^"]+)"/);
+  const durationMatch = html.match(/"duration":(\d+)/);
+  const qualityTypeMatch = html.match(/"qualityType":"([^"]+)"/);
+
+  const title = captionMatch ? decodeUnicodeEscapes(captionMatch[1]) : null;
+  const author = userNameMatch ? decodeUnicodeEscapes(userNameMatch[1]) : null;
+  const thumbnail = coverUrlMatch ? decodeUnicodeEscapes(coverUrlMatch[1]) : null;
+  const duration = durationMatch ? parseInt(durationMatch[1]) : null;
+
+  const qt = qualityTypeMatch?.[1] ?? "";
+  const quality = qt.includes("1080") || qt.includes("fhd") ? "FHD"
+    : qt.includes("720") || qt.includes("hd") ? "HD"
+    : "SD";
+
+  return { title, thumbnail, video_url: videoUrl, quality, author, duration };
+}
+
 async function scrapeKuaishouUrl(url: string): Promise<VideoInfo> {
   const desktopUrl = url.replace("m.kuaishou.com", "www.kuaishou.com");
 
@@ -289,6 +328,10 @@ async function scrapeKuaishouUrl(url: string): Promise<VideoInfo> {
   }
 
   for (const html of responses) {
+    // Short-link share pages (chenzhongtech.com) — adaptationSet/backupUrl format
+    const shareResult = extractVideoFromKuaishouSharePage(html);
+    if (shareResult) return shareResult;
+
     const $ = cheerio.load(html);
 
     const ogVideoUrl =

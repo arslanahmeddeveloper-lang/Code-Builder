@@ -79,7 +79,11 @@ router.get("/proxy-video", proxyLimiter, async (req, res) => {
     videoUrl = decodeURIComponent(url);
     const parsed = new URL(videoUrl);
     const validHosts = [
+      // Kuaishou CDN
       "kuaishou.com", "ks3cdn.com", "kspkg.com", "kuaishoupkg.com", "gifshow.com",
+      // Kuaishou share page CDN (chenzhongtech.com short links)
+      "oskwai.com", "kwimgs.com", "wskwai.com", "yximgs.com", "chenzhongtech.com",
+      // Kwai CDN
       "kwai.com", "kwai.app", "kwai-video.com", "kwaicdn.com", "akwai.com",
       "kwai.net", "ak-br-cdn.kwai.net", "aws-us-cdn.kwai.net", "aws-br-cdn.kwai.net",
       "ak-br-pic.kwai.net", "aws-us-pic.kwai.net", "p1-kimg.kwai.net", "p15-kimg.kwai.net",
@@ -108,7 +112,7 @@ router.get("/proxy-video", proxyLimiter, async (req, res) => {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Referer: videoUrl.includes("kwai") ? "https://www.kwai.com/" : "https://www.kuaishou.com/",
+        Referer: /\bkwai\.(com|app|net)\b/.test(videoUrl) ? "https://www.kwai.com/" : "https://www.kuaishou.com/",
         ...(req.headers.range ? { Range: req.headers.range } : {}),
       },
       maxRedirects: 10,
